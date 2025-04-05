@@ -1,5 +1,5 @@
 use anyhow::Context;
-use aya::programs::{Xdp, XdpFlags, TracePoint};
+use aya::programs::{Xdp, XdpFlags, TracePoint, UProbe, URetProbe};
 use aya_log::EbpfLogger;
 use clap::Parser;
 use log::info;
@@ -35,9 +35,25 @@ async fn main() -> Result<(), anyhow::Error> {
     // program.attach(&opt.iface, XdpFlags::SKB_MODE)
     //     .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
 
-    let mkdir_program: &mut TracePoint = bpf.program_mut("trace_mkdir").unwrap().try_into()?;
-    mkdir_program.load()?;
-    mkdir_program.attach("syscalls", "sys_enter_mkdir")?;
+    // let mkdir_program: &mut TracePoint = bpf.program_mut("trace_mkdir").unwrap().try_into()?;
+    // mkdir_program.load()?;
+    // mkdir_program.attach("syscalls", "sys_enter_mkdir")?;
+
+    // Attach uprobe to malloc
+    let malloc_uprobe: &mut UProbe = bpf.program_mut("track_malloc").unwrap().try_into()?;
+    malloc_uprobe.load()?;
+    malloc_uprobe.attach(Some("malloc"), 0, "/usr/lib/libc.so.6", None)?;
+
+    // Attach uretprobe to malloc
+    let malloc_uretprobe: &mut URetProbe = bpf.program_mut("track_malloc_ret").unwrap().try_into()?;
+    malloc_uretprobe.load()?;
+    malloc_uretprobe.attach(Some("malloc"), 0, "/usr/lib/libc.so.6", None)?;
+
+    // Attach uprobe to free
+    let free_uprobe: &mut UProbe = bpf.program_mut("track_free").unwrap().try_into()?;
+    free_uprobe.load()?;
+    free_uprobe.attach(Some("free"), 0, "/usr/lib/libc.so.6", None)?;
+    
 
     info!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;

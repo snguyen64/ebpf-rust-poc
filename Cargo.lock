@@ -396,6 +396,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ebpf-rust-poc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aya 0.13.1 (git+https://github.com/aya-rs/aya)",
+ "aya-build",
+ "aya-log",
+ "clap",
+ "ebpf-rust-poc-common",
+ "ebpf-rust-poc-ebpf",
+ "env_logger",
+ "log",
+ "tokio",
+]
+
+[[package]]
 name = "ebpf-rust-poc-common"
 version = "0.1.0"
 dependencies = [
@@ -1012,19 +1028,3 @@ name = "winsafe"
 version = "0.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
-
-[[package]]
-name = "xdp-hello"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aya 0.13.1 (git+https://github.com/aya-rs/aya)",
- "aya-build",
- "aya-log",
- "clap",
- "ebpf-rust-poc-common",
- "ebpf-rust-poc-ebpf",
- "env_logger",
- "log",
- "tokio",
-]

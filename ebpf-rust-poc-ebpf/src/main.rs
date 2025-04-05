@@ -1,27 +1,24 @@
-#![no_std] // 
-#![no_main] // 
+#![no_std]
+#![no_main]
 
-use aya_ebpf::{bindings::xdp_action, macros::xdp, programs::XdpContext};
+use aya_ebpf::{macros::tracepoint, programs::TracePointContext};
 use aya_log_ebpf::info;
 
-#[xdp] // 
-pub fn xdp_hello(ctx: XdpContext) -> u32 {
-    // 
-    match unsafe { try_xdp_hello(ctx) } {
+#[tracepoint]
+pub fn trace_mkdir(ctx: TracePointContext) -> u32 {
+    match unsafe { try_trace_mkdir(ctx) } {
         Ok(ret) => ret,
-        Err(_) => xdp_action::XDP_ABORTED,
+        Err(_) => 1, // Return non-zero on error
     }
 }
 
-unsafe fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
-    // 
-    info!(&ctx, "received a packet");
-    // 
-    Ok(xdp_action::XDP_PASS)
+unsafe fn try_trace_mkdir(ctx: TracePointContext) -> Result<u32, u32> {
+    info!(&ctx, "mkdir syscall intercepted");
+    Ok(0) // Return 0 on success
 }
 
 #[cfg(not(test))]
-#[panic_handler] // 
+#[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }

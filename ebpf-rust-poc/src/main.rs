@@ -1,5 +1,5 @@
 use anyhow::Context;
-use aya::programs::{Xdp, XdpFlags, TracePoint, UProbe, URetProbe};
+use aya::programs::{TracePoint, UProbe, Xdp, XdpFlags};
 use aya_log::EbpfLogger;
 use clap::Parser;
 use log::info;
@@ -39,21 +39,25 @@ async fn main() -> Result<(), anyhow::Error> {
     // mkdir_program.load()?;
     // mkdir_program.attach("syscalls", "sys_enter_mkdir")?;
 
+    println!("Attaching uprobes and uretprobes...");
+
     // Attach uprobe to malloc
     let malloc_uprobe: &mut UProbe = bpf.program_mut("track_malloc").unwrap().try_into()?;
     malloc_uprobe.load()?;
-    malloc_uprobe.attach(Some("malloc"), 0, "/usr/lib/libc.so.6", None)?;
+    malloc_uprobe.attach("malloc", "libc", None, None)?;
+    println!("malloc uprobe attached");
 
     // Attach uretprobe to malloc
-    let malloc_uretprobe: &mut URetProbe = bpf.program_mut("track_malloc_ret").unwrap().try_into()?;
+    let malloc_uretprobe: &mut UProbe = bpf.program_mut("track_malloc_ret").unwrap().try_into()?;
     malloc_uretprobe.load()?;
-    malloc_uretprobe.attach(Some("malloc"), 0, "/usr/lib/libc.so.6", None)?;
+    malloc_uretprobe.attach("malloc", "libc", None, None)?;
+    println!("malloc uretprobe attached");
 
     // Attach uprobe to free
     let free_uprobe: &mut UProbe = bpf.program_mut("track_free").unwrap().try_into()?;
     free_uprobe.load()?;
-    free_uprobe.attach(Some("free"), 0, "/usr/lib/libc.so.6", None)?;
-    
+    free_uprobe.attach("free", "libc", None, None)?;
+    println!("free uprobe attached");
 
     info!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;

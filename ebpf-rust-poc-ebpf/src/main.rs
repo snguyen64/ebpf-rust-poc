@@ -1,7 +1,11 @@
 #![no_std]
 #![no_main]
 
-use aya_ebpf::{macros::{uprobe, uretprobe}, programs::ProbeContext, programs::RetProbeContext};
+use aya_ebpf::{
+    macros::{uprobe, uretprobe},
+    programs::ProbeContext,
+    programs::RetProbeContext,
+};
 use aya_log_ebpf::info;
 
 #[uprobe]
@@ -18,14 +22,14 @@ unsafe fn try_track_malloc(ctx: ProbeContext) -> Result<(), u32> {
 }
 
 #[uretprobe]
-pub fn track_malloc_ret(ctx: ProbeContext) -> u32 {
+pub fn track_malloc_ret(ctx: RetProbeContext) -> u32 {
     match unsafe { try_track_malloc_ret(ctx) } {
         Ok(_) => 0,
         Err(_) => 1,
     }
 }
 
-unsafe fn try_track_malloc_ret(ctx: ProbeContext) -> Result<(), u32> {
+unsafe fn try_track_malloc_ret(ctx: RetProbeContext) -> Result<(), u32> {
     info!(&ctx, "malloc returned");
     Ok(())
 }

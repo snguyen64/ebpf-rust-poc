@@ -1,0 +1,16 @@
+{
+	"name": "ebpf-rust-devcontainer",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"runArgs": [
+		"--cap-add=CAP_BPF",
+		"--cap-add=CAP_NET_ADMIN",
+		"--cap-add=CAP_PERFMON",
+		"--cap-add=CAP_SYS_ADMIN"
+	],
+	"privileged": true,
+	"features": {},
+    "postCreateCommand": "sudo mount -t debugfs debugfs /sys/kernel/debug/ && ulimit -l unlimited",
+	"remoteUser": "root"
+}

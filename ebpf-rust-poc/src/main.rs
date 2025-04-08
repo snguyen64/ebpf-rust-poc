@@ -4,6 +4,8 @@ use aya_log::EbpfLogger;
 use clap::Parser;
 use log::info;
 use tokio::signal; // (1)
+mod bpf_metrics;
+use bpf_metrics::{collector, exporter};
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -15,7 +17,12 @@ struct Opt {
 async fn main() -> Result<(), anyhow::Error> {
     let opt = Opt::parse();
 
+    println!("Starting application...");
+
     env_logger::init();
+    bpf_metrics::init_metrics();
+    collector::collect();
+    exporter::export();
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
     // runtime. This approach is recommended for most real-world use cases. If you would

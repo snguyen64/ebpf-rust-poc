@@ -2,7 +2,7 @@ FROM mcr.microsoft.com/devcontainers/rust:1-bookworm
 
 # Install llvm
 RUN apt-get update \
-  && apt install -y lsb-release wget software-properties-common gnupg \
+  && apt install -y lsb-release wget software-properties-common gnupg protobuf-compiler \
   && wget https://apt.llvm.org/llvm.sh \
   && chmod a+x llvm.sh \
   && ./llvm.sh 20 all \

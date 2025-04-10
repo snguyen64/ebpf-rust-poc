@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h> // For sleep()
 
 int main() {
     printf("Allocating memory...\n");
@@ -10,6 +11,9 @@ int main() {
     }
 
     printf("Memory allocated at %p\n", ptr);
+
+    printf("Waiting for 5 seconds...\n");
+    sleep(5); // Wait for 5 seconds
 
     printf("Freeing memory...\n");
     free(ptr); // Free the allocated memory

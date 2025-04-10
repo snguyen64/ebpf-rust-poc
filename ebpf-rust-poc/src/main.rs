@@ -5,7 +5,9 @@ use clap::Parser;
 use log::info;
 use tokio::signal; // (1)
 mod bpf_metrics;
-use bpf_metrics::{collector, exporter};
+use std::{collections::HashMap, env, hash::Hash};
+use ebpf_rust_poc_common::AllocInfo;
+// use aya::maps
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -16,35 +18,21 @@ struct Opt {
 #[tokio::main] // (3)
 async fn main() -> Result<(), anyhow::Error> {
     let opt = Opt::parse();
-
     println!("Starting application...");
 
     env_logger::init();
-    bpf_metrics::init_metrics();
-    collector::collect();
-    exporter::export();
+    bpf_metrics::registry::MetricsRegistry::initialize(); // Initialize the metrics registry
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at
     // runtime. This approach is recommended for most real-world use cases. If you would
     // like to specify the eBPF program at runtime rather than at compile-time, you can
     // reach for `Ebpf::load_file` instead.
-    // (4)
-    // (5)
     let mut bpf = aya::Ebpf::load(aya::include_bytes_aligned!(concat!(
         env!("OUT_DIR"),
         "/ebpf-rust-poc"
     )))?;
-    EbpfLogger::init(&mut bpf)?;
-    // (6)
-    // let program: &mut Xdp = bpf.program_mut("xdp_hello").unwrap().try_into()?;
-    // program.load()?; // (7)
-    //                  // (8)
-    // program.attach(&opt.iface, XdpFlags::SKB_MODE)
-    //     .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
 
-    // let mkdir_program: &mut TracePoint = bpf.program_mut("trace_mkdir").unwrap().try_into()?;
-    // mkdir_program.load()?;
-    // mkdir_program.attach("syscalls", "sys_enter_mkdir")?;
+    EbpfLogger::init(&mut bpf)?;
 
     println!("Attaching uprobes and uretprobes...");
 
@@ -65,6 +53,50 @@ async fn main() -> Result<(), anyhow::Error> {
     free_uprobe.load()?;
     free_uprobe.attach("free", "libc", None, None)?;
     println!("free uprobe attached");
+
+    // let malloc_map: HashMap<u32, u32> = HashMap::try_from(bpf.take_map("malloc_map").context("failed to map malloc_map")?,)?;
+    let aya_malloc_map = aya::maps::HashMap::<_, u32, u32>::try_from(
+        bpf.take_map("malloc_map").context("failed to map malloc_map")?,
+    )?;
+    // let aya_malloc_map = aya::maps::HashMap::<_, u64, u32>::try_from(
+    //     bpf.take_map("malloc_map").context("failed to map malloc_map")?,
+    // )?;
+    // let malloc_map: std::collections::HashMap<u32, u32> = aya_malloc_map
+    //     .iter()
+    //     .filter_map(Result::ok)
+    //     .collect();
+
+    // let aya_malloc_info_map = aya::maps::HashMap::<_, u32, AllocInfo>::try_from(
+    //     bpf.take_map("malloc_info_map").context("failed to map malloc_info_map")?,
+    // )?;
+    // let malloc_info_map: std::collections::HashMap<u32, AllocInfo> = aya_malloc_info_map
+    //     .iter()
+    //     .filter_map(Result::ok)
+    //     .collect();
+
+    println!("Maps loaded");
+
+    
+    loop {
+        println!("malloc_map contents:");
+        for result in aya_malloc_map.iter() {
+            match result {
+                Ok((key, value)) => {
+                    println!("Key: {}, Value: {}", key, value);
+                }
+                Err(e) => {
+                    eprintln!("Error reading map: {}", e);
+                }
+            }
+        }
+        
+        // println!("malloc_info_map contents:");
+        // for (key, value) in malloc_info_map.iter() {
+        //     println!("Key: {}, Value: {:?}", key, value);
+        // }
+        println!("---------------------------------");
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
 
     info!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;

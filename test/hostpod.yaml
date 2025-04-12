@@ -3,15 +3,18 @@ kind: Pod
 metadata:
   name: hostpath-pod
 spec:
+  hostPID: true # Allow the container to see the host's PID namespace
   containers:
   - name: app
     image: busybox
     command: ["sleep", "3600"]
+    securityContext:
+      privileged: true # Allow full access to the host's resources
     volumeMounts:
     - name: host-logs
       mountPath: /host-logs
     - name: host-proc
-      mountPath: /host-proc
+      mountPath: /proc # Mount the host's /proc directory
   volumes:
   - name: host-logs
     hostPath:
@@ -19,5 +22,5 @@ spec:
       type: Directory
   - name: host-proc
     hostPath:
-      path: /proc/self
+      path: /proc
       type: Directory

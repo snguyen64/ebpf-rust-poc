@@ -24,3 +24,13 @@ spec:
     hostPath:
       path: /proc
       type: Directory
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-malloc-free
+spec:
+  containers:
+  - name: test-malloc-free
+    image: test-malloc-free:latest
+    imagePullPolicy: Never

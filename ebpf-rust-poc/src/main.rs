@@ -4,6 +4,7 @@ use aya_log::EbpfLogger;
 use aya::maps::HashMap;
 use clap::Parser;
 use log::info;
+use opentelemetry::global::meter_provider;
 use tokio::signal;
 use std::env;
 use ebpf_rust_poc_common::AllocInfo;
@@ -21,7 +22,9 @@ async fn main() -> Result<(), anyhow::Error> {
     println!("Starting application...");
 
     env_logger::init();
-    bpf_metrics::registry::MetricsRegistry::initialize();
+    let cache = bpf_metrics::enricher::PodCache::initialize().await;
+    let meter_provider = bpf_metrics::exporter::init_metrics();
+    let registry = bpf_metrics::registry::MetricsRegistry::initialize();
 
     // This will include your eBPF object file as raw bytes at compile-time and load it at``
     // runtime. This approach is recommended for most real-world use cases. If you would
@@ -36,36 +39,58 @@ async fn main() -> Result<(), anyhow::Error> {
     attach_probes(&mut bpf)?;
 
     let alloc_blocks: HashMap<_, u64, AllocInfo> = HashMap::try_from(
-        bpf.map_mut("allocated_blocks").context("failed to map allocated_blocks")?,
+        bpf.take_map("allocated_blocks").context("failed to map allocated_blocks")?,
     )?;
     println!("Maps loaded");
 
-    let container_ids = get_container_ids().context("Failed to retrieve container IDs")?;
-    println!("Container IDs: {:?}", container_ids);
+    // Todo this map should be updated every now and then
+    let pid_container_map = get_container_ids().context("Failed to retrieve container IDs")?;
+    let mut pid_map: HashMap<_, u32, u32> = HashMap::try_from(
+        bpf.take_map("pid_map").context("failed to map PID_MAP")?,
+    )?;
+    for (pid, _) in pid_container_map.iter() {
+        pid_map.insert(pid, &1, 0).context("Failed to insert PID into PID_MAP")?;
+    }
+    println!("PID map loaded. PIDs of interest: ");
+    for pid in pid_container_map.keys() {
+        print!("{}, ", pid);
+    }
+    println!();
 
     loop {
         println!("allocated_blocks contents with size {}: ", alloc_blocks.iter().count());
-        let mut cgroup_count_map: std::collections::HashMap<u64, (usize, usize)> = std::collections::HashMap::new();
+        let mut pid_count_map: std::collections::HashMap<u32, (u64, u64)> = std::collections::HashMap::new();
 
         for alloc_map_entry in alloc_blocks.iter() {
             if let Ok((_, alloc_info)) = alloc_map_entry {
-                let entry = cgroup_count_map.entry(alloc_info.cgroup).or_insert((0, 0));
+                // tgid is used to identify the thread group id (host pid)
+                let entry = pid_count_map.entry(alloc_info.tgid).or_insert((0, 0));
                 entry.0 += 1; // Increment count
-                entry.1 += alloc_info.size as usize; // Add to total size
+                entry.1 += alloc_info.size as u64; // Add to total size
             }
         }
-        for (cgroup_id, count) in cgroup_count_map.iter() {
-            println!("Cgroup ID: {}, Alloc Count: {}, Alloc Amount in Bytes: {}", cgroup_id, count.0, count.1);
+        // for (pid, count) in pid_count_map.iter() {
+            // println!("PID: {}, Alloc Count: {}, Alloc Amount in Bytes: {}", pid, count.0, count.1);
+        // }
+
+        for (pid, count) in pid_count_map.iter() {
+            if let Some(container_id) = pid_container_map.get(pid) {
+                if let Some(pod_info) = cache.cache.get(container_id) {
+                    registry.update_alloc_info(
+                        &container_id,
+                        &pod_info.namespace,
+                        &pod_info.pod_name,
+                        count.1,
+                    );
+                }
+            } else {
+                println!("No container ID found for PID: {}", pid);
+            }
         }
+
         println!("---------------------------------");
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
-
-    info!("Waiting for Ctrl-C...");
-    signal::ctrl_c().await?;
-    info!("Exiting...");
-
-    Ok(())
 }
 
 fn attach_probes(bpf: &mut aya::Ebpf) -> Result<(), anyhow::Error> {
@@ -91,9 +116,8 @@ fn attach_probes(bpf: &mut aya::Ebpf) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn get_container_ids() -> Result<Vec<String>, anyhow::Error> {
-    let mut container_ids = Vec::new();
-
+fn get_container_ids() -> Result<std::collections::HashMap<u32, String>, anyhow::Error> {
+    let mut pid_to_container_id = std::collections::HashMap::new();
     // since this application will be running privileged with access to /proc, we get get the container ids from /proc/<pid>/cgroup (file)
     // the cgroup file contains the cgroup hierarchy for the process, including the container id
     // we can parse the cgroup file to get the container id
@@ -102,7 +126,23 @@ fn get_container_ids() -> Result<Vec<String>, anyhow::Error> {
     // so given that we already have the PID, we can read the cgroup file and parse it to get the container id
     // the container id is the last part of the cgroup path, so we can split the path by / and get the last part (while cutting off the .scope part)
     // we can also check if the cgroup path contains cri-containerd, which is a good indicator that this is a container
-    
+    let proc_dir = fs::read_dir("/proc").context("Failed to read /proc directory")?;
+    for entry in proc_dir {
+        let entry = entry.context("Failed to read directory entry")?;
+        if let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() {
+            let cgroup_path = format!("/proc/{}/cgroup", pid);
+            if let Ok(cgroup_content) = fs::read_to_string(&cgroup_path) {
+                for line in cgroup_content.lines() {
+                    if let Some(container_id) = line.split('/').last() {
+                        if container_id.contains("cri-containerd") {
+                            let container_id = container_id.trim_end_matches(".scope");
+                            pid_to_container_id.insert(pid, container_id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-    Ok(container_ids)
+    Ok(pid_to_container_id)
 }

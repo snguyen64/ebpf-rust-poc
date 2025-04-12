@@ -3,19 +3,22 @@
 
 use aya_ebpf::{
     helpers::{
-        self, bpf_get_current_comm, bpf_get_current_pid_tgid, bpf_get_current_uid_gid, bpf_get_smp_processor_id, bpf_ktime_get_ns, bpf_probe_read, bpf_probe_read_user, generated::{bpf_get_current_cgroup_id, bpf_get_retval}
-    }, macros::{map, uprobe, uretprobe}, maps::HashMap, programs::{ProbeContext, RetProbeContext}, EbpfContext
+        bpf_get_current_pid_tgid, bpf_ktime_get_ns, generated::bpf_get_current_cgroup_id,
+    }, macros::{map, uprobe, uretprobe}, maps::HashMap, programs::{ProbeContext, RetProbeContext},
 };
 use aya_log_ebpf::info;
 use ebpf_rust_poc_common::AllocInfo;
 
+// We only care about PIDs that we can find in /proc/<pid>/cgroup
+// This is a map of pid to cgroup id. This is used to find the container ID from the cgroup id.
+#[map(name = "pid_map")]
+static mut PID_MAP: HashMap<u32, u32> = HashMap::with_max_entries(4096, 0);
 // Step 1: Malloc map. Key is the timestamp+pid of the call.
 #[map(name = "malloc_map")]
-static mut MALLOC_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(1024, 0);
+static mut MALLOC_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(4096, 0);
 // malloc info map of address to alloc info. This represents allocated blocks. The key is the address returned from the malloc call.
 #[map(name = "allocated_blocks")]
-static mut ALLOCATED_BLOCKS_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(1024, 0);
-// todo we need to track uretprobe for malloc to get the return value (address) so we can free it later
+static mut ALLOCATED_BLOCKS_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(4096, 0);
 
 #[uprobe]
 pub fn track_malloc(ctx: ProbeContext) -> u32 {
@@ -29,6 +32,13 @@ unsafe fn try_track_malloc(ctx: ProbeContext) -> Result<(), u32> {
     // info!(&ctx, "malloc called");
     let pid = (bpf_get_current_pid_tgid() & 0xFFFFFFFF) as u32; // gets pid (8 bytes right)
     let tgid = (bpf_get_current_pid_tgid() >> 32) as u32; // gets tgid (8 bytes left)
+    if PID_MAP.get(&tgid).is_none() { // thread group id correlates to the host pid
+        // we skip this since we are not interested in this pid.
+        info!(&ctx, "skipping malloc for tgid {}", tgid);
+        return Ok(());
+    } else {
+        info!(&ctx, "tracking malloc for tgid {}", tgid);
+    }
     let malloc_size = ctx.arg(0).unwrap_or(0) as u32;
     let ts = bpf_ktime_get_ns();
     let cgroup_id = bpf_get_current_cgroup_id();
@@ -61,8 +71,11 @@ unsafe fn try_track_malloc_ret(ctx: RetProbeContext) -> Result<(), u32> {
     if addr == 0 {
         return Ok(());
     }
-    let ts = bpf_ktime_get_ns();
     let lookup_key = bpf_get_current_pid_tgid();
+    if PID_MAP.get(&((lookup_key >> 32) as u32)).is_none() {
+        // we skip this since we are not interested in this pid.
+        return Ok(());
+    }
     // info!(&ctx, "malloc return address {} with key {}", addr, lookup_key);
     let malloc_value = MALLOC_MAP.get(&lookup_key).unwrap_or(&AllocInfo {
         pid: 0,
@@ -75,8 +88,8 @@ unsafe fn try_track_malloc_ret(ctx: RetProbeContext) -> Result<(), u32> {
         return Ok(());
     }
 
-    ALLOCATED_BLOCKS_MAP.insert(&addr, malloc_value, 0);
     MALLOC_MAP.remove(&lookup_key);
+    ALLOCATED_BLOCKS_MAP.insert(&addr, malloc_value, 0);
     Ok(())
 }
 
@@ -91,6 +104,11 @@ pub fn track_free(ctx: ProbeContext) -> u32 {
 unsafe fn try_track_free(ctx: ProbeContext) -> Result<(), u32> {
     let free_ptr = ctx.arg(0).unwrap_or(0) as u64;
     if free_ptr == 0 {
+        return Ok(());
+    }
+    let tgid = (bpf_get_current_pid_tgid() >> 32) as u32;
+    if PID_MAP.get(&tgid).is_none() {
+        // we skip this since we are not interested in this pid.
         return Ok(());
     }
     let free_value = ALLOCATED_BLOCKS_MAP.get(&free_ptr).unwrap_or(&AllocInfo {

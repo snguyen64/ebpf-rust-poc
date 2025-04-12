@@ -31,3 +31,26 @@ CC=${ARCH}-linux-musl-gcc cargo build --package ebpf-rust-poc --release \
 ```
 The cross-compiled program `target/${ARCH}-unknown-linux-musl/release/ebpf-rust-poc` can be
 copied to a Linux server or VM and run there.
+
+---
+### install metrics server
+sudo snap install helm --classic 
+```
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server 
+helm repo update
+helm upgrade --install --set args={--kubelet-insecure-tls} metrics-server metrics-server/metrics-server --namespace kube-system
+```
+
+### Deploying the POC
+```
+// build image
+docker build -t ebpf-rust-poc:latest .
+
+// load image into kind cluster
+kind load docker-image ebpf-rust-poc:latest
+
+kubectl apply -f pod.yaml
+// viewing the logs/metrics... atm only exported to stdout
+
+kubectl logs -n kube-system ebpf-rust-poc-pod -f
+```

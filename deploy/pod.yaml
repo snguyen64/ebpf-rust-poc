@@ -10,30 +10,23 @@ spec:
     matchLabels:
       app: ebpf-rust-poc
   template:
+    metadata:
+      labels:
+        app: ebpf-rust-poc # Ensure this matches the selector.matchLabels
     spec:
+      serviceAccountName: ebpf-rust-poc-sa
       hostPID: true # Allow the container to see the host's PID namespace
       containers:
       - name: ebpf-rust-poc-container
         securityContext:
           privileged: true # Allow full access to the host's resources
-        image: # TODO replace with Docker image name
+        image: ebpf-rust-poc:latest # Use the loaded image from kind
+        imagePullPolicy: Never # Use the local image
         env:
           - name: NODE_NAME
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-          - name: POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
         resources:
           limits:
             memory: "256Mi"
@@ -58,3 +51,31 @@ spec:
           hostPath:
             path: /proc
             type: Directory
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ebpf-rust-poc-sa
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ebpf-rust-poc-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "namespaces"]
+  verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ebpf-rust-poc-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ebpf-rust-poc-role
+subjects:
+- kind: ServiceAccount
+  name: ebpf-rust-poc-sa
+  namespace: kube-system

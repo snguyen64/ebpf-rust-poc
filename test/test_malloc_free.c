@@ -4,7 +4,7 @@
 
 int main() {
     printf("Allocating memory...\n");
-    void *ptr = malloc(1024); // Allocate 1 KB of memory
+    void *ptr = malloc(4096); // Allocate 4096 bytes
     if (ptr == NULL) {
         perror("malloc failed");
         return 1;
@@ -12,8 +12,8 @@ int main() {
 
     printf("Memory allocated at %p\n", ptr);
 
-    printf("Waiting for 5 seconds...\n");
-    sleep(5); // Wait for 5 seconds
+    printf("Waiting for 2 seconds...\n");
+    sleep(2); // Wait for 2 seconds
 
     printf("Freeing memory...\n");
     free(ptr); // Free the allocated memory

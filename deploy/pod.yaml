@@ -11,8 +11,11 @@ spec:
       app: ebpf-rust-poc
   template:
     spec:
+      hostPID: true # Allow the container to see the host's PID namespace
       containers:
       - name: ebpf-rust-poc-container
+        securityContext:
+          privileged: true # Allow full access to the host's resources
         image: # TODO replace with Docker image name
         env:
           - name: NODE_NAME
@@ -42,6 +45,8 @@ spec:
           mountPath: /sys/fs/bpf
         - name: cgroup
           mountPath: /sys/fs/cgroup
+        - name: host-proc
+          mountPath: /proc # Mount the host's /proc directory
       volumes:
         - name: bpf
           hostPath:
@@ -49,3 +54,7 @@ spec:
         - name: cgroup
           hostPath:
             path: /sys/fs/cgroup
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory

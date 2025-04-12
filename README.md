@@ -41,6 +41,9 @@ helm repo update
 helm upgrade --install --set args={--kubelet-insecure-tls} metrics-server metrics-server/metrics-server --namespace kube-system
 ```
 
+### Notes
+* broke something when trying to add filtering for tgid/pid
+
 ### Deploying the POC
 ```
 // build image
@@ -49,8 +52,10 @@ docker build -t ebpf-rust-poc:latest .
 // load image into kind cluster
 kind load docker-image ebpf-rust-poc:latest
 
+// also load host pod for malloc/free on the cluster
+
 kubectl apply -f pod.yaml
 // viewing the logs/metrics... atm only exported to stdout
 
-kubectl logs -n kube-system ebpf-rust-poc-pod -f
+kubectl logs -n kube-system -f <ebpf-pod>
 ```

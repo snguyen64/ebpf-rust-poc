@@ -1,12 +1,13 @@
 use anyhow::Context;
-use aya::programs::{TracePoint, UProbe, Xdp, XdpFlags};
+use aya::{maps::Map, programs::{TracePoint, UProbe, Xdp, XdpFlags}};
 use aya_log::EbpfLogger;
 use clap::Parser;
 use log::info;
-use tokio::signal; // (1)
+use tokio::signal;
 mod bpf_metrics;
-use std::{collections::HashMap, env, hash::Hash};
+use std::env;
 use ebpf_rust_poc_common::AllocInfo;
+use aya::maps::{HashMap, MapData};
 // use aya::maps
 
 #[derive(Debug, Parser)]
@@ -23,7 +24,7 @@ async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
     bpf_metrics::registry::MetricsRegistry::initialize(); // Initialize the metrics registry
 
-    // This will include your eBPF object file as raw bytes at compile-time and load it at
+    // This will include your eBPF object file as raw bytes at compile-time and load it at``
     // runtime. This approach is recommended for most real-world use cases. If you would
     // like to specify the eBPF program at runtime rather than at compile-time, you can
     // reach for `Ebpf::load_file` instead.
@@ -54,48 +55,28 @@ async fn main() -> Result<(), anyhow::Error> {
     free_uprobe.attach("free", "libc", None, None)?;
     println!("free uprobe attached");
 
-    // let malloc_map: HashMap<u32, u32> = HashMap::try_from(bpf.take_map("malloc_map").context("failed to map malloc_map")?,)?;
-    let aya_malloc_map = aya::maps::HashMap::<_, u32, u32>::try_from(
-        bpf.take_map("malloc_map").context("failed to map malloc_map")?,
+    let alloc_blocks: HashMap<_, u64, AllocInfo> = HashMap::try_from(
+        bpf.map_mut("allocated_blocks").context("failed to map allocated_blocks")?,
     )?;
-    // let aya_malloc_map = aya::maps::HashMap::<_, u64, u32>::try_from(
-    //     bpf.take_map("malloc_map").context("failed to map malloc_map")?,
-    // )?;
-    // let malloc_map: std::collections::HashMap<u32, u32> = aya_malloc_map
-    //     .iter()
-    //     .filter_map(Result::ok)
-    //     .collect();
-
-    // let aya_malloc_info_map = aya::maps::HashMap::<_, u32, AllocInfo>::try_from(
-    //     bpf.take_map("malloc_info_map").context("failed to map malloc_info_map")?,
-    // )?;
-    // let malloc_info_map: std::collections::HashMap<u32, AllocInfo> = aya_malloc_info_map
-    //     .iter()
-    //     .filter_map(Result::ok)
-    //     .collect();
 
     println!("Maps loaded");
 
-    
     loop {
-        println!("malloc_map contents:");
-        for result in aya_malloc_map.iter() {
-            match result {
-                Ok((key, value)) => {
-                    println!("Key: {}, Value: {}", key, value);
-                }
-                Err(e) => {
-                    eprintln!("Error reading map: {}", e);
-                }
+        println!("allocated_blocks contents with size {}: ", alloc_blocks.iter().count());
+        let mut cgroup_count_map: std::collections::HashMap<u64, (usize, usize)> = std::collections::HashMap::new();
+
+        for alloc_map_entry in alloc_blocks.iter() {
+            if let Ok((_, alloc_info)) = alloc_map_entry {
+                let entry = cgroup_count_map.entry(alloc_info.cgroup).or_insert((0, 0));
+                entry.0 += 1; // Increment count
+                entry.1 += alloc_info.size as usize; // Add to total size
             }
         }
-        
-        // println!("malloc_info_map contents:");
-        // for (key, value) in malloc_info_map.iter() {
-        //     println!("Key: {}, Value: {:?}", key, value);
-        // }
+        for (cgroup_id, count) in cgroup_count_map.iter() {
+            println!("Cgroup ID: {}, Alloc Count: {}, Alloc Amount in Bytes: {}", cgroup_id, count.0, count.1);
+        }
         println!("---------------------------------");
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 
     info!("Waiting for Ctrl-C...");

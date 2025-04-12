@@ -17,8 +17,8 @@ unsafe fn try_trace_mkdir(ctx: TracePointContext) -> Result<u32, u32> {
     Ok(0) // Return 0 on success
 }
 
-#[cfg(not(test))]
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
+// #[cfg(not(test))]
+// #[panic_handler]
+// fn panic(_info: &core::panic::PanicInfo) -> ! {
+//     loop {}
+// }

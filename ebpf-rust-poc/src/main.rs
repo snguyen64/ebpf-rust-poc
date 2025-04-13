@@ -49,37 +49,48 @@ async fn main() -> Result<(), anyhow::Error> {
     )?;
     println!("PID map loaded");
     for pid in cache.get_pids() {
-        pid_map.insert(pid, 0, 0).context("failed to insert pid into pid_map")?;
+        pid_map.insert(pid, 1, 0).context("failed to insert pid into pid_map")?;
         // todo remove pid from pid_map if not found in cache - doesnt matter for now since we aren't updating cache
     }
 
     loop {
-        let mut pid_count_map: std::collections::HashMap<u32, (u64, u64)> = std::collections::HashMap::new();
+        let mut pid_count_size_map: std::collections::HashMap<u32, (u64, u64)> = std::collections::HashMap::new();
 
         for alloc_map_entry in alloc_blocks.iter() {
             if let Ok((_, alloc_info)) = alloc_map_entry {
-                let entry = pid_count_map.entry(alloc_info.tgid).or_insert((0, 0));
+                // println!("ALLOC_INFO: PID: {}, Size: {}, Timestamp: {}, Cgroup ID: {}", alloc_info.pid, alloc_info.size, alloc_info.timestamp, alloc_info.cgroup);
+                let entry = pid_count_size_map.entry(alloc_info.tgid).or_insert((0, 0));
                 entry.0 += 1; // Increment count -- total number allocations for this pid
-                entry.1 += alloc_info.size as u64; // Add to total size for this pid
+                entry.1 = entry.1.saturating_add(alloc_info.size as u64); // Add to total size for this pid
+                // println!(
+                //     "ENTRY: PID: {}, Size: {}, Allocations: {}",
+                //     alloc_info.tgid, alloc_info.size, entry.0
+                // );
             }
         }
 
-        for (pid, count) in pid_count_map.iter() {
+        // for (pid, (count, size)) in pid_count_size_map.iter() {
+        //     println!("map print: PID: {}, Allocations: {}, Total Size: {}", pid, count, size);
+        // }
+
+        for (pid, (count, size)) in pid_count_size_map.iter() {
             if let Some(container_id) = cache.get_container_id_by_pid(*pid) {
                 if let Some(pod_info) = cache.get_pod_info_by_container_id(&container_id) {
+                    // println!(
+                    //     "METRIC: Container ID: {}, Pod: {} in Namespace: {}, Allocations: {}, Total Size: {}",
+                    //     container_id, pod_info.pod_name, pod_info.namespace, count, *size
+                    // );
                     registry.update_alloc_info(
                         &container_id,
                         &pod_info.namespace,
                         &pod_info.pod_name,
-                        count.1,
+                        *size,
                     );
                 }
             } else {
                 println!("No container ID found for PID: {}", pid);
             }
         }
-
-        println!("---------------------------------");
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 }

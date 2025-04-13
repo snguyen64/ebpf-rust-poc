@@ -4,7 +4,7 @@ CONTAINER_RUNTIME := docker
 all: quick-clean quick-build quick-deploy
 
 quick-clean:
-	$(CONTAINER_RUNTIME) rmi ebpf-rust-poc:latest; \
+	$(CONTAINER_RUNTIME) rmi -f ebpf-rust-poc:latest || true; \
 
 quick-build:
 	$(CONTAINER_RUNTIME) build -t ebpf-rust-poc:latest .; \

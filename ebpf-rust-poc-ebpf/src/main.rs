@@ -12,13 +12,13 @@ use ebpf_rust_poc_common::AllocInfo;
 // We only care about PIDs that we can find in /proc/<pid>/cgroup
 // This is a map of pid to cgroup id. This is used to find the container ID from the cgroup id.
 #[map(name = "pid_map")]
-static mut PID_MAP: HashMap<u32, u32> = HashMap::with_max_entries(4096, 0);
+static mut PID_MAP: HashMap<u32, u32> = HashMap::with_max_entries(65536, 0);
 // Step 1: Malloc map. Key is the timestamp+pid of the call.
 #[map(name = "malloc_map")]
-static mut MALLOC_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(4096, 0);
+static mut MALLOC_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(65536, 0);
 // malloc info map of address to alloc info. This represents allocated blocks. The key is the address returned from the malloc call.
 #[map(name = "allocated_blocks")]
-static mut ALLOCATED_BLOCKS_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(4096, 0);
+static mut ALLOCATED_BLOCKS_MAP: HashMap<u64, AllocInfo> = HashMap::with_max_entries(65536, 0);
 
 #[uprobe]
 pub fn track_malloc(ctx: ProbeContext) -> u32 {

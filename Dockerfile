@@ -42,4 +42,5 @@ WORKDIR /app
 COPY --from=builder /app/target/release/ebpf-rust-poc /app/ebpf-rust-poc
 
 # Set the default command to run the application
+ENV RUST_LOG=info
 CMD ["/app/ebpf-rust-poc"]

@@ -25,12 +25,21 @@ spec:
       path: /proc
       type: Directory
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: test-malloc-free
 spec:
-  containers:
-  - name: test-malloc-free
-    image: test-malloc-free:latest
-    imagePullPolicy: Never
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-malloc-free
+  template:
+    metadata:
+      labels:
+        app: test-malloc-free
+    spec:
+      containers:
+      - name: test-malloc-free
+        image: test-malloc-free:latest
+        imagePullPolicy: Never

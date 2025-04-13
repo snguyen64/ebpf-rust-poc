@@ -59,3 +59,18 @@ kubectl apply -f pod.yaml
 
 kubectl logs -n kube-system -f <ebpf-pod>
 ```
+
+1. ebpf runs at host level.
+2. user space program will see the proper container id via the volume mount in /proc/<pid>/cgroup
+3. kind will see the host pid - above the kind node and on the actual host - in this case my ubuntu vm processes.
+
+So this is the hierarchy in kind and why we are facing an issue
+[Real Host Machine]
+├── PID 959533 (docker-containerd)  ← eBPF sees this level
+│   └── [Kind Node Container]
+│       ├── PID 10477 (kubelet)     ← Your pod's /proc shows this level
+│       └── [Pod Containers]
+│           ├── PID 1 (container entrypoint)
+│           └── PID 1887 (your app)
+
+some workaround is to mount the /proc directory to kind cluster

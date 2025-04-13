@@ -34,7 +34,7 @@ impl MetricsRegistry {
         labels.push(opentelemetry::KeyValue::new("pod_name", pod_name.to_string()));
 
         // Update the alloc_info metric with the value and labels
-        println!("Updating [Metric] alloc_info with value: {} and labels: {:?}", value, labels);
+        // println!("Updating [Metric] alloc_info with value: {} and labels: {:?}", value, labels);
         self.alloc_info.record(value as u64, &labels);
     }
 }
